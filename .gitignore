@@ -49,3 +49,12 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Local tooling / editor / agent config
+build/
+.agents/
+.claude/
+.mcp.json
+.repowise/
+.vscode/
+openspec/
