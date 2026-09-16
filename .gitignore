@@ -58,3 +58,4 @@ build/
 .repowise/
 .vscode/
 openspec/
+templates/
