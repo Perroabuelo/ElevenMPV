@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <psp2/io/fcntl.h>
 #include <FLAC/metadata.h>
 
 #include "audio.h"
@@ -6,13 +7,93 @@
 #define DR_FLAC_IMPLEMENTATION
 #include "dr_flac.h"
 
+// Large read-ahead buffer around the raw file descriptor. dr_flac's default
+// file callbacks otherwise issue many small sceIoRead syscalls while
+// scanning/seeking, which is slow on the memory card / SD2VITA.
+#define FLAC_IO_BUFFER_SIZE (128 * 1024)
+
+typedef struct {
+	SceUID fd;
+	unsigned char *buffer;
+	SceOff buffer_file_offset;
+	SceSize buffer_fill;
+	SceOff pos;
+} Flac_BufferedIo;
+
+static Flac_BufferedIo flac_io;
+
+static size_t FLAC_ReadCB(void *user_data, void *buffer_out, size_t bytes_to_read) {
+	Flac_BufferedIo *io = (Flac_BufferedIo *)user_data;
+	unsigned char *out = (unsigned char *)buffer_out;
+	size_t total_read = 0;
+
+	while (bytes_to_read > 0) {
+		if (io->pos >= io->buffer_file_offset && io->pos < io->buffer_file_offset + (SceOff)io->buffer_fill) {
+			SceSize offset_in_buffer = (SceSize)(io->pos - io->buffer_file_offset);
+			SceSize available = io->buffer_fill - offset_in_buffer;
+			SceSize to_copy = (bytes_to_read < available) ? (SceSize)bytes_to_read : available;
+
+			memcpy(out, io->buffer + offset_in_buffer, to_copy);
+
+			out += to_copy;
+			io->pos += to_copy;
+			total_read += to_copy;
+			bytes_to_read -= to_copy;
+		}
+		else {
+			SceSSize ret;
+
+			sceIoLseek(io->fd, io->pos, SCE_SEEK_SET);
+			ret = sceIoRead(io->fd, io->buffer, FLAC_IO_BUFFER_SIZE);
+
+			if (ret <= 0) {
+				io->buffer_fill = 0;
+				break;
+			}
+
+			io->buffer_file_offset = io->pos;
+			io->buffer_fill = (SceSize)ret;
+		}
+	}
+
+	return total_read;
+}
+
+static drflac_bool32 FLAC_SeekCB(void *user_data, int offset, drflac_seek_origin origin) {
+	Flac_BufferedIo *io = (Flac_BufferedIo *)user_data;
+
+	if (origin == drflac_seek_origin_start)
+		io->pos = offset;
+	else
+		io->pos += offset;
+
+	return DRFLAC_TRUE;
+}
+
 static drflac *flac;
 static drflac_uint64 frames_read = 0;
 
 int FLAC_Init(const char *path) {
-	flac = drflac_open_file(path, NULL);
-	if (flac == NULL)
+	flac_io.fd = sceIoOpen(path, SCE_O_RDONLY, 0);
+	if (flac_io.fd < 0)
 		return -1;
+
+	flac_io.buffer = malloc(FLAC_IO_BUFFER_SIZE);
+	flac_io.buffer_file_offset = 0;
+	flac_io.buffer_fill = 0;
+	flac_io.pos = 0;
+
+	if (flac_io.buffer == NULL) {
+		sceIoClose(flac_io.fd);
+		return -1;
+	}
+
+	flac = drflac_open(FLAC_ReadCB, FLAC_SeekCB, &flac_io, NULL);
+	if (flac == NULL) {
+		free(flac_io.buffer);
+		sceIoClose(flac_io.fd);
+		return -1;
+	}
 
 	FLAC__StreamMetadata *tags;
 	if (FLAC__metadata_get_tags(path, &tags)) {
@@ -118,18 +199,18 @@ void FLAC_Term(void) {
 		metadata.has_meta = SCE_FALSE;
 
 	drflac_close(flac);
+
+	free(flac_io.buffer);
+	sceIoClose(flac_io.fd);
+	flac_io.buffer = NULL;
 }
 
 // Functions needed for libFLAC
 
-int chmod(const char *pathname, mode_t mode) {
-	return 0;
-}
-
-int chown(const char *path, int owner, int group) {
-	return 0;
-}
-
 int utime(const char *filename, const void *buf) {
+	return 0;
+}
+
+int utimensat(int dirfd, const char *pathname, const void *times, int flags) {
 	return 0;
 }

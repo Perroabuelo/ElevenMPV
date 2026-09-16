@@ -9,6 +9,7 @@
 #include "status_bar.h"
 #include "textures.h"
 #include "utils.h"
+#include "vitaaudiolib.h"
 
 static void Menu_DisplayDeviceSettings(void) {
 	int selection = 0, max_items = 2;
@@ -285,14 +286,89 @@ static void Menu_DisplayALCModeSettings(void) {
 	}
 }
 
+static void Menu_DisplayAudioSettings(void) {
+	int selection = 0, max_items = 5;
+
+	const char *menu_items[] = {
+		"EQ: Off",
+		"EQ: Heavy",
+		"EQ: Pop",
+		"EQ: Jazz",
+		"EQ: Unique",
+		"Limit volume with EQ"
+	};
+
+	while (SCE_TRUE) {
+		vita2d_start_drawing();
+		vita2d_clear_screen();
+
+		vita2d_draw_rectangle(0, 0, 960, 40, RGBA8(40, 40, 40, 255));
+		vita2d_draw_rectangle(0, 40, 960, 72, RGBA8(51, 51, 51, 255));
+		StatusBar_Display();
+
+		vita2d_draw_texture(icon_back, 25, 54);
+		vita2d_font_draw_text(font, 102, 40 + ((72 - vita2d_font_text_height(font, 25, "Audio Settings")) / 2) + 20, RGBA8(255, 255, 255, 255), 25, "Audio Settings");
+
+		int printed = 0;
+
+		for (int i = 0; i < max_items + 1; i++) {
+			if (printed == FILES_PER_PAGE)
+				break;
+
+			if (selection < FILES_PER_PAGE || i > (selection - FILES_PER_PAGE)) {
+				if (i == selection)
+					vita2d_draw_rectangle(0, 112 + (72 * printed), 960, 72, RGBA8(230, 230, 230, 255));
+
+				vita2d_font_draw_text(font, 30, 120 + (72 / 2) + (72 * printed), RGBA8(51, 51, 51, 255), 25, menu_items[i]);
+
+				printed++;
+			}
+		}
+
+		for (int i = 0; i < 5; i++)
+			vita2d_draw_texture(config.eq_mode == i ? radio_on : radio_off, 850, 126 + (72 * i));
+
+		vita2d_draw_texture(config.eq_volume == SCE_TRUE ? toggle_on : toggle_off, 850, 118 + (72 * 5));
+
+		vita2d_end_drawing();
+		vita2d_swap_buffers();
+
+		Utils_ReadControls();
+
+		if (pressed & SCE_CTRL_CANCEL)
+			break;
+
+		if (pressed & SCE_CTRL_UP)
+			selection--;
+		else if (pressed & SCE_CTRL_DOWN)
+			selection++;
+
+		Utils_SetMax(&selection, 0, max_items);
+		Utils_SetMin(&selection, max_items, 0);
+
+		if (pressed & SCE_CTRL_ENTER) {
+			if (selection <= 4) {
+				config.eq_mode = selection;
+				sceAudioOutSetEffectType(config.eq_mode);
+				Config_Save(config);
+			}
+			else {
+				config.eq_volume = !config.eq_volume;
+				Config_Save(config);
+			}
+		}
+	}
+}
+
 void Menu_DisplaySettings(void) {
-	int selection = 0, max_items = 3;
+	int selection = 0, max_items = 4;
 
 	const char *menu_items[] = {
 		"Device settings",
 		"Sort settings",
 		"Metadata settings",
-		"Dynamic normalizer modes"
+		"Dynamic normalizer modes",
+		"Audio settings"
 	};
 
 	while (SCE_TRUE) {
@@ -351,6 +427,9 @@ void Menu_DisplaySettings(void) {
 					break;
 				case 3:
 					Menu_DisplayALCModeSettings();
+					break;
+				case 4:
+					Menu_DisplayAudioSettings();
 					break;
 			}
 		}

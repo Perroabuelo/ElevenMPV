@@ -3,6 +3,11 @@
 #include "audio.h"
 #include "xmp.h"
 
+// libs/lib/libxmp-lite.a was built against an older newlib that exposed the
+// ctype table through __ctype_ptr__ instead of the current _ctype_ symbol.
+extern const char _ctype_[];
+const char *__ctype_ptr__ = _ctype_;
+
 static xmp_context xmp;
 static struct xmp_frame_info frame_info;
 static struct xmp_module_info module_info;

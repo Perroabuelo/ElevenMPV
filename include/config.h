@@ -10,6 +10,8 @@ typedef struct {
 	int sort;
 	int alc_mode;
 	int device;
+	int eq_mode;      // 0 = Off, 1 = Heavy, 2 = Pop, 3 = Jazz, 4 = Unique
+	SceBool eq_volume; // Halve output volume while an EQ preset is active
 } config_t;
 
 extern config_t config;

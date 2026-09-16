@@ -15,6 +15,7 @@
 #include "textures.h"
 #include "touch.h"
 #include "utils.h"
+#include "vitaaudiolib.h"
 
 int main(int argc, char *argv[]) {
 	vita2d_init();
@@ -24,6 +25,7 @@ int main(int argc, char *argv[]) {
 	sceIoMkdir("ux0:data/ElevenMPV", 0777);
 	Config_Load();
 	Config_GetLastDirectory();
+	sceAudioOutSetEffectType(config.eq_mode);
 
 	Utils_InitAppUtil();
 	SCE_CTRL_ENTER = Utils_GetEnterButton();
